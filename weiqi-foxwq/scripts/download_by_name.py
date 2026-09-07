@@ -11,6 +11,7 @@
 注意：本脚本通过平台提供的公开API获取数据，仅供个人学习研究使用。
 """
 
+import argparse
 import sys
 import os
 import json
@@ -157,27 +158,26 @@ def parse_result(winner, point, reason):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("用法: python3 download_by_name.py <昵称> [--limit N] [--output-dir DIR]")
-        print("示例: python3 download_by_name.py KataGo")
-        print(
-            "      python3 download_by_name.py KataGo --limit 5 --output-dir /tmp/qipu"
-        )
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        epilog=(
+            "示例:\n"
+            "  python3 download_by_name.py KataGo\n"
+            "  python3 download_by_name.py KataGo --limit 5 --output-dir /tmp/qipu"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("nickname", help="用户昵称")
+    parser.add_argument(
+        "-l", "--limit", type=int, default=1, help="下载数量限制（默认 1）"
+    )
+    parser.add_argument(
+        "-o", "--output-dir", default=".", help="输出目录（默认当前目录）"
+    )
+    args = parser.parse_args()
 
-    nickname = sys.argv[1]
-    limit = None
-    output_dir = "/tmp/foxwq_by_name"
-
-    # 解析参数
-    for i, arg in enumerate(sys.argv[2:], 2):
-        if arg == "--limit" and i + 1 < len(sys.argv):
-            try:
-                limit = int(sys.argv[i + 1])
-            except ValueError:
-                pass
-        elif arg == "--output-dir" and i + 1 < len(sys.argv):
-            output_dir = sys.argv[i + 1]
+    nickname = args.nickname
+    limit = args.limit
+    output_dir = args.output_dir
 
     print("=" * 60)
     print("🎯 野狐围棋 - 通过昵称下载棋谱")
@@ -247,14 +247,7 @@ def main():
         print(f"   结果: {result} | 手数: {movenum} | ID: {chessid}")
         print()
 
-    # 4. 询问是否下载
-    if sys.stdin.isatty():  # 交互模式
-        response = input("💾 是否下载以上棋谱? (y/n): ").strip().lower()
-        if response != "y":
-            print("已取消下载")
-            return
-
-    # 5. 下载棋谱
+    # 4. 下载棋谱
     print()
     print("=" * 60)
     print("⬇️  开始下载棋谱...")
@@ -289,7 +282,7 @@ def main():
             print(f"❌ 失败: {e}")
             failed_list.append((chessid, str(e)))
 
-    # 6. 报告
+    # 5. 报告
     elapsed = time.time() - start_time
     print()
     print("=" * 60)
