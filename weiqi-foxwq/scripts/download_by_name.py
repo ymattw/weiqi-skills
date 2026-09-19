@@ -23,8 +23,8 @@ import time
 
 # API configuration (source: open-source project GetFoxRequest.java)
 QUERY_USER_URL = "https://newframe.foxwq.com/cgi/QueryUserInfoPanel"
-CHESS_LIST_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChessList"
-FETCH_CHESS_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess"
+GAME_LIST_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChessList"
+FETCH_GAME_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess"
 MOBILE_USER_AGENT = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
 )
@@ -76,7 +76,7 @@ def query_user_by_name(nickname):
     }
 
 
-def fetch_chess_list(uid, lastcode="0"):
+def fetch_game_list(uid, lastcode="0"):
     """
     Fetch the game record list
 
@@ -86,7 +86,7 @@ def fetch_chess_list(uid, lastcode="0"):
     """
     encoded_uid = urllib.parse.quote(uid)
     # Build request URL: type=1 means fetching the game list
-    url = f"{CHESS_LIST_URL}?srcuid=0&dstuid={encoded_uid}&type=1&lastcode={lastcode}&searchkey=&uin={encoded_uid}"
+    url = f"{GAME_LIST_URL}?srcuid=0&dstuid={encoded_uid}&type=1&lastcode={lastcode}&searchkey=&uin={encoded_uid}"
 
     response = http_get(url)
     data = json.loads(response)
@@ -98,13 +98,13 @@ def fetch_chess_list(uid, lastcode="0"):
     return data.get("chesslist", [])
 
 
-def fetch_sgf(chessid):
+def fetch_sgf(gameid):
     """
     Download a single game as SGF
 
     Retrieves the SGF-format game data for the given game ID.
     """
-    url = f"{FETCH_CHESS_URL}?chessid={chessid}"
+    url = f"{FETCH_GAME_URL}?chessid={gameid}"
 
     response = http_get(url)
     data = json.loads(response)
@@ -210,16 +210,16 @@ def main():
     # 2. Fetch the game list
     print("📋 Fetching game list...")
     try:
-        chess_list = fetch_chess_list(uid)
+        game_list = fetch_game_list(uid)
     except Exception as e:
         print(f"❌ Failed to fetch game list: {e}")
         sys.exit(1)
 
-    if not chess_list:
+    if not game_list:
         print("⚠️ This user has no public game records")
         sys.exit(0)
 
-    total_games = len(chess_list)
+    total_games = len(game_list)
     print(f"✅ Found {total_games} game records")
     print()
 
@@ -229,10 +229,10 @@ def main():
     print("=" * 60)
     print()
 
-    games_to_show = chess_list[:limit] if limit else chess_list
+    games_to_show = game_list[:limit] if limit else game_list
 
     for idx, game in enumerate(games_to_show, 1):
-        chessid = game.get("chessid", "")
+        gameid = game.get("chessid", "")
         black_nick = game.get("blacknick", "Black")
         white_nick = game.get("whitenick", "White")
         black_dan = format_dan(game.get("blackdan", 0))
@@ -247,7 +247,7 @@ def main():
         print(
             f"{idx}. [{start_time_str}] {black_nick}({black_dan}) vs {white_nick}({white_dan})"
         )
-        print(f"   Result: {result} | Moves: {movenum} | ID: {chessid}")
+        print(f"   Result: {result} | Moves: {movenum} | ID: {gameid}")
         print()
 
     # 4. Download game records
@@ -262,20 +262,20 @@ def main():
     failed_list = []
 
     for idx, game in enumerate(games_to_show, 1):
-        chessid = game.get("chessid", "")
+        gameid = game.get("chessid", "")
         start_time_str = (
             game.get("starttime", "unknown").replace(" ", "_").replace(":", "-")
         )
 
         # Generate the file name
         safe_nickname = re.sub(r"[^\w\u4e00-\u9fff]", "_", nickname)
-        filename = f"{idx:03d}_{safe_nickname}_{start_time_str}_{chessid}.sgf"
+        filename = f"{idx:03d}_{safe_nickname}_{start_time_str}_{gameid}.sgf"
         filepath = os.path.join(output_dir, filename)
 
-        print(f"[{idx}/{len(games_to_show)}] Downloading {chessid} ...", end=" ")
+        print(f"[{idx}/{len(games_to_show)}] Downloading {gameid} ...", end=" ")
 
         try:
-            sgf_content = fetch_sgf(chessid)
+            sgf_content = fetch_sgf(gameid)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(sgf_content)
             print(f"✅ Saved: {filename}")
@@ -283,7 +283,7 @@ def main():
             time.sleep(0.2)  # Avoid making requests too quickly
         except Exception as e:
             print(f"❌ Failed: {e}")
-            failed_list.append((chessid, str(e)))
+            failed_list.append((gameid, str(e)))
 
     # 5. Report
     elapsed = time.time() - start_time
@@ -299,8 +299,8 @@ def main():
     if failed_list:
         print()
         print("❌ Failed downloads:")
-        for chessid, error in failed_list:
-            print(f"   - {chessid}: {error}")
+        for gameid, error in failed_list:
+            print(f"   - {gameid}: {error}")
 
     print()
     print("✅ Done!")

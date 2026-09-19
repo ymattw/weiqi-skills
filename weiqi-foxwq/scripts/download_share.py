@@ -69,21 +69,21 @@ def parse_share_url(url):
 
     return {
         "roomid": params.get("roomid", [None])[0],
-        "chessid": params.get("chessid", [None])[0],
+        "gameid": params.get("chessid", [None])[0],
         "uid": params.get("uid", [None])[0],
         "createtime": params.get("createtime", [None])[0],
         "full_url": url,
     }
 
 
-def extract_via_api(chessid):
+def extract_via_api(gameid):
     """
     Fetch the historical game record SGF via the API
     Suitable for finished games
 
     API endpoint: https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess
     """
-    api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess?chessid={chessid}"
+    api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess?chessid={gameid}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
@@ -116,14 +116,14 @@ def extract_via_api(chessid):
         return None
 
 
-def extract_game_info(chessid, uid=None):
+def extract_game_info(gameid, uid=None):
     """
     Fetch basic game information
 
     API endpoint: https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID
     """
     uid_param = f"&uid={uid}" if uid else ""
-    api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID?with_edu=1&chessid={chessid}{uid_param}"
+    api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID?with_edu=1&chessid={gameid}{uid_param}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
@@ -140,15 +140,15 @@ def extract_game_info(chessid, uid=None):
         if data.get("result") != 0:
             return None
 
-        chesslist = data.get("chesslist", {})
+        gamelist = data.get("chesslist", {})
         return {
-            "black_nick": chesslist.get("blacknick", "Black"),
-            "white_nick": chesslist.get("whitenick", "White"),
-            "black_dan": chesslist.get("blackdan", 0),
-            "white_dan": chesslist.get("whitedan", 0),
-            "result": chesslist.get("result", ""),
-            "start_time": chesslist.get("gamestarttime", ""),
-            "movenum": chesslist.get("movenum", 0),
+            "black_nick": gamelist.get("blacknick", "Black"),
+            "white_nick": gamelist.get("whitenick", "White"),
+            "black_dan": gamelist.get("blackdan", 0),
+            "white_dan": gamelist.get("whitedan", 0),
+            "result": gamelist.get("result", ""),
+            "start_time": gamelist.get("gamestarttime", ""),
+            "movenum": gamelist.get("movenum", 0),
         }
 
     except Exception as e:
@@ -526,12 +526,12 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
     with timer.step("Parse share link"):
         params = parse_share_url(url)
 
-    if not params["chessid"]:
-        print("❌ Invalid share link, could not extract chessid")
+    if not params["gameid"]:
+        print("❌ Invalid share link, could not extract gameid")
         return None
 
     print(f"\nGame information:")
-    print(f"  Chess ID: {params['chessid']}")
+    print(f"  Game ID: {params['gameid']}")
     print(f"  Extraction mode: {mode}")
     print()
 
@@ -542,12 +542,12 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
     if mode in ("auto", "api"):
         print("🔍 Trying to fetch the game record via API...")
         with timer.step("Fetch game record via API"):
-            sgf = extract_via_api(params["chessid"])
+            sgf = extract_via_api(params["gameid"])
 
         if sgf:
             print("✅ API fetch succeeded!")
             # Also fetch game information
-            game_info = extract_game_info(params["chessid"], params.get("uid"))
+            game_info = extract_game_info(params["gameid"], params.get("uid"))
         elif mode == "api":
             print("❌ API fetch failed")
             return None
@@ -610,7 +610,7 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
 
     # Determine the output path
     if not output_path:
-        output_path = f"/tmp/foxwq_{params['chessid']}.sgf"
+        output_path = f"/tmp/foxwq_{params['gameid']}.sgf"
 
     # Save the file
     with timer.step("Save file"):
