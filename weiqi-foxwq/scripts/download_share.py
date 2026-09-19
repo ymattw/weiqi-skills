@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-野狐围棋分享链接SGF下载器
-支持从野狐H5分享链接提取棋谱SGF
-自动检测对局状态：已结束使用API，进行中使用WebSocket
+Fox Weiqi share-link SGF downloader
+Supports extracting game record SGF from Fox H5 share links
+Automatically detects game status: uses the API for finished games and
+WebSocket for games in progress
 
-用法:
-    python3 download_share.py <分享链接> [输出文件]
+Usage:
+    python3 download_share.py <share-link> [output-file]
 
-示例:
+Examples:
     python3 download_share.py "https://h5.foxwq.com/yehunewshare/?chessid=12345..."
     python3 download_share.py "https://h5.foxwq.com/..." /tmp/game.sgf
 """
@@ -28,9 +29,9 @@ from collections import OrderedDict
 from sgf_parser import parse_sgf as sgf_parse
 
 
-# 性能计时工具
+# Performance timing utility
 class PerformanceTimer:
-    """性能计时器"""
+    """Performance timer"""
 
     def __init__(self):
         self.timings = OrderedDict()
@@ -50,19 +51,19 @@ class PerformanceTimer:
             self.timings[name] = elapsed
 
     def format_report(self):
-        lines = ["\n" + "=" * 50, "⏱️  性能计时报告", "=" * 50]
+        lines = ["\n" + "=" * 50, "⏱️  Performance Timing Report", "=" * 50]
         for name, elapsed in self.timings.items():
             lines.append(f"  {name:25s} : {elapsed:>8.3f}s")
         lines.append("=" * 50)
         return "\n".join(lines)
 
 
-# 全局计时器
+# Global timer
 timer = PerformanceTimer()
 
 
 def parse_share_url(url):
-    """解析分享链接，提取参数"""
+    """Parse the share link and extract its parameters"""
     parsed = urlparse(url)
     params = parse_qs(parsed.query)
 
@@ -77,10 +78,10 @@ def parse_share_url(url):
 
 def extract_via_api(chessid):
     """
-    通过API获取历史棋谱SGF
-    适用于已结束的对局
+    Fetch the historical game record SGF via the API
+    Suitable for finished games
 
-    API端点: https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess
+    API endpoint: https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess
     """
     api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess?chessid={chessid}"
 
@@ -97,29 +98,29 @@ def extract_via_api(chessid):
         data = response.json()
 
         if data.get("result") != 0:
-            print(f"⚠️ API返回错误码: {data.get('result')}")
+            print(f"⚠️ API returned error code: {data.get('result')}")
             return None
 
         sgf = data.get("chess")
         if not sgf:
-            print("⚠️ API未返回棋谱数据")
+            print("⚠️ API did not return game record data")
             return None
 
         return sgf
 
     except requests.exceptions.RequestException as e:
-        print(f"⚠️ API请求失败: {e}")
+        print(f"⚠️ API request failed: {e}")
         return None
     except json.JSONDecodeError as e:
-        print(f"⚠️ API返回数据解析失败: {e}")
+        print(f"⚠️ Failed to parse API response: {e}")
         return None
 
 
 def extract_game_info(chessid, uid=None):
     """
-    获取对局基本信息
+    Fetch basic game information
 
-    API端点: https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID
+    API endpoint: https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID
     """
     uid_param = f"&uid={uid}" if uid else ""
     api_url = f"https://h5.foxwq.com/yehuDiamond/chessbook_local/FetchChessSummaryByChessID?with_edu=1&chessid={chessid}{uid_param}"
@@ -141,8 +142,8 @@ def extract_game_info(chessid, uid=None):
 
         chesslist = data.get("chesslist", {})
         return {
-            "black_nick": chesslist.get("blacknick", "黑棋"),
-            "white_nick": chesslist.get("whitenick", "白棋"),
+            "black_nick": chesslist.get("blacknick", "Black"),
+            "white_nick": chesslist.get("whitenick", "White"),
             "black_dan": chesslist.get("blackdan", 0),
             "white_dan": chesslist.get("whitedan", 0),
             "result": chesslist.get("result", ""),
@@ -155,7 +156,7 @@ def extract_game_info(chessid, uid=None):
 
 
 def extract_moves_from_binary(data):
-    """从二进制数据中提取着法 (08 xx 10 yy 模式) - 普通直播棋谱"""
+    """Extract moves from binary data (08 xx 10 yy pattern) - standard live game record"""
     moves = []
     i = 0
     while i < len(data) - 4:
@@ -172,22 +173,22 @@ def extract_moves_from_binary(data):
 
 def extract_jueyi_live_from_binary(data):
     """
-    从绝艺解说直播二进制数据中提取主分支棋谱
+    Extract the main-branch game record from Jueyi commentary live binary data
 
-    协议格式:
-    - 主分支标记: 10 cb 01
-    - 着法数据: 1a12 08<x>10<y>18<color> ...
-    - 绝艺评论: jueyi[评论内容]
+    Protocol format:
+    - Main branch marker: 10 cb 01
+    - Move data: 1a12 08<x>10<y>18<color> ...
+    - Jueyi comment: jueyi[comment content]
 
     Args:
-        data: 二进制数据
+        data: Binary data
 
     Returns:
-        list: 着法列表 [(x, y), ...]
+        list: List of moves [(x, y), ...]
     """
     moves = []
 
-    # 主分支标记
+    # Main branch marker
     main_branch_marker = bytes([0x10, 0xCB, 0x01])
 
     pos = 0
@@ -196,7 +197,7 @@ def extract_jueyi_live_from_binary(data):
         if pos == -1:
             break
 
-        # 标记后应该是: 1a12 08<x>10<y>18<color>
+        # Marker should be followed by: 1a12 08<x>10<y>18<color>
         start = pos + len(main_branch_marker)
         segment = data[start : start + 20]
 
@@ -204,7 +205,7 @@ def extract_jueyi_live_from_binary(data):
             pos += 1
             continue
 
-        # 解析着法: \x08<x>\x10<y>\x18<color>
+        # Parse move: \x08<x>\x10<y>\x18<color>
         move_match = re.search(
             rb"\x08([\x00-\x13])\x10([\x00-\x13])\x18([\x01\x02])", segment
         )
@@ -224,23 +225,23 @@ def extract_jueyi_live_from_binary(data):
 
 def is_jueyi_live_data(data):
     """
-    判断是否为绝艺解说直播数据
+    Determine whether the data is Jueyi commentary live data
 
-    判断依据:
-    - 包含 "jueyi" 字符串
-    - 包含主分支标记 10 cb 01
+    Criteria:
+    - Contains the string "jueyi"
+    - Contains the main branch marker 10 cb 01
 
     Args:
-        data: 二进制数据
+        data: Binary data
 
     Returns:
-        bool: 是否为绝艺直播数据
+        bool: Whether this is Jueyi live data
     """
-    # 检查是否包含 "jueyi" 字符串
+    # Check whether the string "jueyi" is present
     if b"jueyi" in data:
         return True
 
-    # 检查是否包含主分支标记
+    # Check whether the main branch marker is present
     main_branch_marker = bytes([0x10, 0xCB, 0x01])
     if main_branch_marker in data:
         return True
@@ -249,16 +250,16 @@ def is_jueyi_live_data(data):
 
 
 def extract_handicap_from_binary(data):
-    """从二进制数据中提取让子数
+    """Extract the handicap count from binary data
 
-    野狐WebSocket协议中GameRule结构:
+    Fox WebSocket protocol GameRule structure:
     - 08 xx: boardsize (19 = 0x13)
     - 10 xx: playingType
-    - 18 xx: handicap (让子数)
+    - 18 xx: handicap (number of handicap stones)
     - 20 xx: komi
     """
     try:
-        # 方法1: 查找 GameRule 模式 (08 13 10 01 18 xx)
+        # Method 1: find the GameRule pattern (08 13 10 01 18 xx)
         # boardsize=19(0x13), playingType=1, handicap=xx
         for i in range(len(data) - 6):
             if (
@@ -272,7 +273,7 @@ def extract_handicap_from_binary(data):
                 if 2 <= handicap <= 9:
                     return handicap
 
-        # 方法2: 查找 HA[数字] 文本模式（SGF格式）
+        # Method 2: find the HA[number] text pattern (SGF format)
         text = data.decode("utf-8", errors="ignore")
         ha_match = re.search(r"HA\[(\d+)\]", text)
         if ha_match:
@@ -284,7 +285,7 @@ def extract_handicap_from_binary(data):
 
 
 def extract_player_names(data):
-    """从二进制数据中提取玩家名"""
+    """Extract player names from binary data"""
     names = []
     try:
         idx = 0
@@ -320,23 +321,23 @@ def extract_player_names(data):
 
 async def extract_via_websocket(url, timeout=15, debug=False):
     """
-    通过WebSocket提取棋谱（可选功能，仅用于进行中的对局）
+    Extract the game record via WebSocket (optional feature, only for games in progress)
 
-    自动判断棋谱类型：
-    - 绝艺解说直播：使用 extract_jueyi_live_from_binary
-    - 普通直播：使用 extract_moves_from_binary
+    Automatically detects the game record type:
+    - Jueyi commentary live: uses extract_jueyi_live_from_binary
+    - Standard live: uses extract_moves_from_binary
 
-    注意: 此功能需要可选依赖 playwright
-    历史棋谱请使用 --mode api 模式，无需安装 playwright
+    Note: This feature requires the optional dependency playwright
+    For historical games use --mode api, which does not require playwright
     """
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        print("⚠️  未安装可选依赖: playwright")
-        print("   如需提取进行中的对局，请运行:")
+        print("⚠️  Optional dependency not installed: playwright")
+        print("   To extract games in progress, please run:")
         print("   pip3 install playwright && playwright install chromium")
         print()
-        print("   💡 提示: 历史棋谱可使用 --mode api 模式，无需 playwright")
+        print("   💡 Tip: for historical games you can use --mode api, no playwright needed")
         return None, None, 0, None
 
     moves = []
@@ -359,14 +360,14 @@ async def extract_via_websocket(url, timeout=15, debug=False):
                     if len(data) > 1000:
                         raw_data = data
 
-                        # 判断棋谱类型
+                        # Determine the game record type
                         if not moves:
                             if is_jueyi_live_data(data):
                                 is_jueyi = True
-                                print("   🎯 检测到绝艺解说直播棋谱")
+                                print("   🎯 Detected Jueyi commentary live game record")
                                 moves = extract_jueyi_live_from_binary(data)
                             else:
-                                print("   📺 检测到普通直播棋谱")
+                                print("   📺 Detected standard live game record")
                                 moves = extract_moves_from_binary(data)
 
                         if not player_names:
@@ -378,28 +379,28 @@ async def extract_via_websocket(url, timeout=15, debug=False):
 
         page.on("websocket", handle_ws)
 
-        with timer.step("WebSocket连接与数据获取"):
+        with timer.step("WebSocket connect and data fetch"):
             await page.goto(url, wait_until="networkidle", timeout=30000)
             await asyncio.sleep(timeout)
 
         await browser.close()
 
-    # 调试模式：保存原始数据供分析
+    # Debug mode: save raw data for analysis
     if debug and raw_data:
         debug_file = f"/tmp/foxwq_ws_debug_{datetime.now().strftime('%H%M%S')}.bin"
         with open(debug_file, "wb") as f:
             f.write(raw_data)
-        print(f"   调试数据已保存: {debug_file}")
+        print(f"   Debug data saved: {debug_file}")
 
-        # 输出前200字节的十六进制供分析
-        print(f"   原始数据前200字节:")
+        # Output the first 200 bytes in hex for analysis
+        print(f"   First 200 bytes of raw data:")
         hex_str = " ".join(f"{b:02x}" for b in raw_data[:200])
         print(f"   {hex_str}")
 
-        # 尝试解码文本部分
+        # Try to decode the text portion
         text = raw_data.decode("utf-8", errors="ignore")
         if text:
-            print(f"   可解码文本片段:")
+            print(f"   Decodable text fragments:")
             for line in text.split("\x00")[:10]:
                 if len(line) > 3 and len(line) < 100:
                     print(f"     {line}")
@@ -407,12 +408,12 @@ async def extract_via_websocket(url, timeout=15, debug=False):
     return moves, player_names, handicap, is_jueyi
 
 
-def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
-    """创建SGF格式棋谱
+def create_sgf(moves, pb="Black", pw="White", handicap=0):
+    """Create an SGF-format game record
 
-    让子棋规则：
-    - 黑棋先摆好让子（AB标记）
-    - 第一手由白棋下
+    Handicap game rules:
+    - Black places the handicap stones first (marked with AB)
+    - White plays the first move
     """
     if not moves:
         return None
@@ -421,16 +422,16 @@ def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
     sgf = f"(;GM[1]FF[4]CA[UTF-8]SZ[19]\n"
     sgf += f"PB[{pb}]PW[{pw}]\n"
 
-    # 添加让子信息
+    # Add handicap information
     if handicap >= 2:
         sgf += f"HA[{handicap}]\n"
-        # 添加让子落子（标准星位）
+        # Add handicap stones (standard star points)
         handicap_coords = {
-            2: [(3, 3), (15, 15)],  # 4-4 对角
+            2: [(3, 3), (15, 15)],  # 4-4 diagonal
             3: [(3, 3), (15, 15), (3, 15)],  # 4-4 + 4-16
-            4: [(3, 3), (15, 15), (3, 15), (15, 3)],  # 4-4 四角
-            5: [(3, 3), (15, 15), (3, 15), (15, 3), (9, 9)],  # 4-4 + 天元
-            6: [(3, 3), (15, 15), (3, 15), (15, 3), (9, 3), (9, 15)],  # 4-4 + 边星
+            4: [(3, 3), (15, 15), (3, 15), (15, 3)],  # 4-4 four corners
+            5: [(3, 3), (15, 15), (3, 15), (15, 3), (9, 9)],  # 4-4 + tengen
+            6: [(3, 3), (15, 15), (3, 15), (15, 3), (9, 3), (9, 15)],  # 4-4 + side stars
             7: [
                 (3, 3),
                 (15, 15),
@@ -439,7 +440,7 @@ def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
                 (9, 3),
                 (9, 15),
                 (9, 9),
-            ],  # 6子 + 天元
+            ],  # 6 stones + tengen
             8: [
                 (3, 3),
                 (15, 15),
@@ -449,7 +450,7 @@ def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
                 (9, 15),
                 (3, 9),
                 (15, 9),
-            ],  # 4-4 + 边星
+            ],  # 4-4 + side stars
             9: [
                 (3, 3),
                 (15, 15),
@@ -460,21 +461,21 @@ def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
                 (3, 9),
                 (15, 9),
                 (9, 9),
-            ],  # 九星
+            ],  # nine star points
         }
         if handicap in handicap_coords:
             for hx, hy in handicap_coords[handicap]:
                 sgf += f";AB[{coord_map[hx]}{coord_map[hy]}]\n"
 
-    # 处理让子棋的着法顺序
-    # 有让子时：第一手是白棋（因为黑棋已经摆好让子）
-    # 无让子时：第一手是黑棋
+    # Handle move order for handicap games
+    # With handicap: White plays first (since Black already placed the handicap stones)
+    # Without handicap: Black plays first
     for i, (x, y) in enumerate(moves):
         if handicap >= 2:
-            # 让子棋：白棋先下
+            # Handicap game: White plays first
             color = "W" if i % 2 == 0 else "B"
         else:
-            # 普通对局：黑棋先下
+            # Normal game: Black plays first
             color = "B" if i % 2 == 0 else "W"
         if 0 <= x < 19 and 0 <= y < 19:
             sgf += f";{color}[{coord_map[x]}{coord_map[y]}]\n"
@@ -484,14 +485,14 @@ def create_sgf(moves, pb="黑棋", pw="白棋", handicap=0):
 
 
 def parse_sgf_info(sgf):
-    """从SGF中提取信息（使用sgf_parser解析）"""
+    """Extract information from the SGF (parsed using sgf_parser)"""
     result = sgf_parse(sgf)
     game_info = result.get("game_info", {})
     stats = result.get("stats", {})
 
     info = {
-        "pb": game_info.get("black", "黑棋"),
-        "pw": game_info.get("white", "白棋"),
+        "pb": game_info.get("black", "Black"),
+        "pw": game_info.get("white", "White"),
         "br": game_info.get("black_rank", ""),
         "wr": game_info.get("white_rank", ""),
         "result": game_info.get("result", ""),
@@ -504,57 +505,57 @@ def parse_sgf_info(sgf):
 
 def extract_from_share_link(url, output_path=None, mode="auto"):
     """
-    主函数：从分享链接提取SGF
+    Main function: extract SGF from a share link
 
     Args:
-        url: 分享链接
-        output_path: 输出文件路径（可选）
-        mode: 提取模式 ('auto', 'api', 'websocket')
-              auto - 自动选择（优先API）
-              api - 仅使用API
-              websocket - 使用WebSocket（自动判断普通/绝艺直播）
+        url: Share link
+        output_path: Output file path (optional)
+        mode: Extraction mode ('auto', 'api', 'websocket')
+              auto - choose automatically (prefer API)
+              api - use the API only
+              websocket - use WebSocket (auto-detects standard/Jueyi live)
     """
 
     print("=" * 60)
-    print("🎯 野狐围棋分享链接SGF下载器")
+    print("🎯 Fox Weiqi Share-Link SGF Downloader")
     print("=" * 60)
 
     timer.start()
 
-    # 解析URL
-    with timer.step("解析分享链接"):
+    # Parse the URL
+    with timer.step("Parse share link"):
         params = parse_share_url(url)
 
     if not params["chessid"]:
-        print("❌ 无效的分享链接，无法提取chessid")
+        print("❌ Invalid share link, could not extract chessid")
         return None
 
-    print(f"\n对局信息:")
+    print(f"\nGame information:")
     print(f"  Chess ID: {params['chessid']}")
-    print(f"  提取模式: {mode}")
+    print(f"  Extraction mode: {mode}")
     print()
 
     sgf = None
     game_info = None
 
-    # 根据模式选择提取方式
+    # Choose the extraction method based on the mode
     if mode in ("auto", "api"):
-        print("🔍 尝试通过API获取棋谱...")
-        with timer.step("API获取棋谱"):
+        print("🔍 Trying to fetch the game record via API...")
+        with timer.step("Fetch game record via API"):
             sgf = extract_via_api(params["chessid"])
 
         if sgf:
-            print("✅ API获取成功！")
-            # 同时获取对局信息
+            print("✅ API fetch succeeded!")
+            # Also fetch game information
             game_info = extract_game_info(params["chessid"], params.get("uid"))
         elif mode == "api":
-            print("❌ API获取失败")
+            print("❌ API fetch failed")
             return None
 
-    # 如果API失败且不是仅API模式，尝试WebSocket
+    # If the API failed and this is not API-only mode, try WebSocket
     if not sgf and mode in ("auto", "websocket"):
-        print("🌐 尝试通过WebSocket获取棋谱...")
-        print("   (适用于进行中的对局)")
+        print("🌐 Trying to fetch the game record via WebSocket...")
+        print("   (suitable for games in progress)")
 
         moves, player_names, handicap, is_jueyi = asyncio.run(
             extract_via_websocket(url)
@@ -562,17 +563,17 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
 
         if moves:
             if is_jueyi:
-                print(f"✅ 绝艺直播棋谱获取成功！共 {len(moves)} 手")
+                print(f"✅ Jueyi live game record fetched successfully! {len(moves)} moves total")
             else:
-                print(f"✅ 普通直播棋谱获取成功！共 {len(moves)} 手")
+                print(f"✅ Standard live game record fetched successfully! {len(moves)} moves total")
 
-            pb = player_names[0] if len(player_names) > 0 else "黑棋"
-            pw = player_names[1] if len(player_names) > 1 else "白棋"
+            pb = player_names[0] if len(player_names) > 0 else "Black"
+            pw = player_names[1] if len(player_names) > 1 else "White"
 
             if handicap > 0:
-                print(f"   检测到让子: {handicap}子")
+                print(f"   Detected handicap: {handicap} stones")
 
-            with timer.step("生成SGF"):
+            with timer.step("Generate SGF"):
                 sgf = create_sgf(moves, pb, pw, handicap)
 
             game_info = {
@@ -582,50 +583,50 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
                 "handicap": handicap,
             }
         else:
-            print("❌ WebSocket获取失败")
+            print("❌ WebSocket fetch failed")
 
     if not sgf:
-        print("\n❌ 无法提取棋谱数据")
-        print("   可能原因：")
-        print("   - 对局已结束且未保存")
-        print("   - 分享链接已过期")
-        print("   - 需要登录权限")
+        print("\n❌ Could not extract game record data")
+        print("   Possible reasons:")
+        print("   - The game has ended and was not saved")
+        print("   - The share link has expired")
+        print("   - Login permission is required")
         print(timer.format_report())
         return None
 
-    # 解析SGF信息
+    # Parse SGF information
     sgf_info = parse_sgf_info(sgf)
 
-    # 合并信息（API信息优先）
+    # Merge information (API information takes priority)
     if game_info:
         sgf_info.update({k: v for k, v in game_info.items() if v})
 
-    print(f"\n📋 对局详情:")
-    print(f"  黑棋: {sgf_info['pb']} {sgf_info['br']}")
-    print(f"  白棋: {sgf_info['pw']} {sgf_info['wr']}")
-    print(f"  结果: {sgf_info['result']}")
-    print(f"  日期: {sgf_info['date']}")
-    print(f"  手数: {sgf_info['movenum']}")
+    print(f"\n📋 Game details:")
+    print(f"  Black: {sgf_info['pb']} {sgf_info['br']}")
+    print(f"  White: {sgf_info['pw']} {sgf_info['wr']}")
+    print(f"  Result: {sgf_info['result']}")
+    print(f"  Date: {sgf_info['date']}")
+    print(f"  Moves: {sgf_info['movenum']}")
 
-    # 确定输出路径
+    # Determine the output path
     if not output_path:
         output_path = f"/tmp/foxwq_{params['chessid']}.sgf"
 
-    # 保存文件
-    with timer.step("保存文件"):
+    # Save the file
+    with timer.step("Save file"):
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(sgf)
 
-    print(f"\n💾 SGF已保存: {output_path}")
+    print(f"\n💾 SGF saved: {output_path}")
 
-    # 显示前10手
+    # Show the first 10 moves
     moves = re.findall(r";([BW])\[([a-z]{2})\]", sgf)
     if moves:
-        print(f"\n前10手预览:")
+        print(f"\nFirst 10 moves preview:")
         for i, (color, coord) in enumerate(moves[:10]):
             x = ord(coord[0]) - ord("a")
             y = ord(coord[1]) - ord("a")
-            color_zh = "黑" if color == "B" else "白"
+            color_zh = "B" if color == "B" else "W"
             coord_str = chr(ord("A") + x) + str(19 - y)
             print(f"  {i+1}. {color_zh}: {coord_str}")
 
@@ -636,24 +637,24 @@ def extract_from_share_link(url, output_path=None, mode="auto"):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="从野狐围棋分享链接下载SGF棋谱",
+        description="Download SGF game records from Fox Weiqi share links",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
+Examples:
   python3 download_share.py "https://h5.foxwq.com/yehunewshare/?chessid=123..."
   python3 download_share.py "https://h5.foxwq.com/..." /tmp/game.sgf
-  python3 download_share.py "..." --mode api        # 仅使用API
-  python3 download_share.py "..." --mode websocket  # 使用WebSocket（自动判断棋谱类型）
+  python3 download_share.py "..." --mode api        # Use API only
+  python3 download_share.py "..." --mode websocket  # Use WebSocket (auto-detects record type)
         """,
     )
 
-    parser.add_argument("url", help="野狐H5分享链接")
-    parser.add_argument("output", nargs="?", help="输出SGF文件路径（可选）")
+    parser.add_argument("url", help="Fox H5 share link")
+    parser.add_argument("output", nargs="?", help="Output SGF file path (optional)")
     parser.add_argument(
         "--mode",
         choices=["auto", "api", "websocket"],
         default="auto",
-        help="提取模式 (默认: auto)",
+        help="Extraction mode (default: auto)",
     )
 
     args = parser.parse_args()
@@ -661,10 +662,10 @@ def main():
     result = extract_from_share_link(args.url, args.output, args.mode)
 
     if result:
-        print(f"\n✅ 下载成功: {result}")
+        print(f"\n✅ Download succeeded: {result}")
         sys.exit(0)
     else:
-        print("\n❌ 下载失败")
+        print("\n❌ Download failed")
         sys.exit(1)
 
 

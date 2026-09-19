@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-野狐围棋 - 通过昵称下载棋谱
-支持：昵称查UID → 获取棋谱列表 → 下载SGF
+Fox Weiqi - Download game records by nickname
+Supports: nickname to UID lookup -> fetch game list -> download SGF
 
-用法:
-    python3 download_by_name.py <昵称> [--limit N] [--output-dir DIR]
+Usage:
+    python3 download_by_name.py <nickname> [--limit N] [--output-dir DIR]
     python3 download_by_name.py KataGo
     python3 download_by_name.py KataGo --limit 10 --output-dir /tmp/qipu
 
-注意：本脚本通过平台提供的公开API获取数据，仅供个人学习研究使用。
+Note: This script retrieves data through the platform's public API and is
+intended for personal study and research only.
 """
 
 import argparse
@@ -20,7 +21,7 @@ import urllib.request
 import urllib.parse
 import time
 
-# API 配置（来源：开源项目 GetFoxRequest.java）
+# API configuration (source: open-source project GetFoxRequest.java)
 QUERY_USER_URL = "https://newframe.foxwq.com/cgi/QueryUserInfoPanel"
 CHESS_LIST_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChessList"
 FETCH_CHESS_URL = "https://h5.foxwq.com/yehuDiamond/chessbook_local/YHWQFetchChess"
@@ -30,7 +31,7 @@ MOBILE_USER_AGENT = (
 
 
 def http_get(url, timeout=20):
-    """发送HTTP GET请求"""
+    """Send an HTTP GET request"""
     req = urllib.request.Request(url)
     req.add_header("User-Agent", MOBILE_USER_AGENT)
     req.add_header("Accept", "application/json,text/plain,*/*")
@@ -41,25 +42,26 @@ def http_get(url, timeout=20):
 
 def query_user_by_name(nickname):
     """
-    通过昵称查询用户信息
+    Look up user information by nickname
 
-    调用平台的用户查询接口，根据昵称获取UID等基本信息。
-    需要提供正确的 API 端点才能正常工作。
+    Calls the platform's user query endpoint to obtain basic information
+    such as the UID based on the nickname.
+    A valid API endpoint is required for this to work.
     """
     encoded_name = urllib.parse.quote(nickname)
-    # 构造请求URL：srcuid=0 表示游客身份查询
+    # Build request URL: srcuid=0 means querying as a guest
     url = f"{QUERY_USER_URL}?srcuid=0&username={encoded_name}"
 
     response = http_get(url)
     data = json.loads(response)
 
     if data.get("result") != 0:
-        error_msg = data.get("resultstr") or data.get("errmsg") or "未知错误"
-        raise Exception(f"查询用户失败: {error_msg}")
+        error_msg = data.get("resultstr") or data.get("errmsg") or "unknown error"
+        raise Exception(f"Failed to query user: {error_msg}")
 
     uid = str(data.get("uid", "")).strip()
     if not uid:
-        raise Exception("未找到该昵称对应的UID")
+        raise Exception("No UID found for this nickname")
 
     return {
         "uid": uid,
@@ -76,20 +78,21 @@ def query_user_by_name(nickname):
 
 def fetch_chess_list(uid, lastcode="0"):
     """
-    获取棋谱列表
+    Fetch the game record list
 
-    调用平台的棋谱列表接口，获取指定用户的公开对局记录。
-    type=1 表示查询类型，lastcode 用于分页。
+    Calls the platform's game list endpoint to retrieve the specified
+    user's public game records.
+    type=1 is the query type, and lastcode is used for pagination.
     """
     encoded_uid = urllib.parse.quote(uid)
-    # 构造请求URL：type=1 表示获取对局列表
+    # Build request URL: type=1 means fetching the game list
     url = f"{CHESS_LIST_URL}?srcuid=0&dstuid={encoded_uid}&type=1&lastcode={lastcode}&searchkey=&uin={encoded_uid}"
 
     response = http_get(url)
     data = json.loads(response)
 
     if data.get("result") != 0:
-        error_msg = data.get("resultstr") or "获取棋谱列表失败"
+        error_msg = data.get("resultstr") or "Failed to fetch game list"
         raise Exception(error_msg)
 
     return data.get("chesslist", [])
@@ -97,9 +100,9 @@ def fetch_chess_list(uid, lastcode="0"):
 
 def fetch_sgf(chessid):
     """
-    下载单局SGF
+    Download a single game as SGF
 
-    根据棋谱ID获取SGF格式的棋谱数据。
+    Retrieves the SGF-format game data for the given game ID.
     """
     url = f"{FETCH_CHESS_URL}?chessid={chessid}"
 
@@ -107,71 +110,71 @@ def fetch_sgf(chessid):
     data = json.loads(response)
 
     if data.get("result") != 0:
-        raise Exception(f"下载棋谱失败: {data.get('resultstr', '未知错误')}")
+        raise Exception(f"Failed to download game record: {data.get('resultstr', 'unknown error')}")
 
     return data.get("chess", "")
 
 
 def format_dan(dan_value):
-    """格式化段位显示"""
+    """Format the rank for display"""
     if dan_value >= 100:
-        return f"职业{dan_value - 100}段"
+        return f"Pro {dan_value - 100}d"
     elif dan_value >= 24:
-        return f"业{dan_value - 20}段"
+        return f"{dan_value - 20}d"
     elif dan_value >= 20:
-        return f"业{dan_value - 20}段"
+        return f"{dan_value - 20}d"
     elif dan_value >= 10:
-        return f"{dan_value - 10}级"
+        return f"{dan_value - 10}k"
     else:
-        return f"{dan_value}级"
+        return f"{dan_value}k"
 
 
 def parse_result(winner, point, reason):
     """
-    解析对局结果
+    Parse the game result
 
-    参数说明:
-    - winner: 1=黑胜, 2=白胜, 0=和棋
-    - point: 胜子数（数子胜时有效）
-    - reason: 1=数子胜, 2=超时, 3=中盘胜, 4=认输
+    Parameters:
+    - winner: 1=Black wins, 2=White wins, 0=Draw
+    - point: winning margin in stones (valid for scoring wins)
+    - reason: 1=scoring win, 2=timeout, 3=middle-game win, 4=resignation
     """
     if winner == 0:
-        return "和棋"
+        return "Draw"
 
-    winner_str = "黑胜" if winner == 1 else "白胜"
+    winner_str = "Black wins" if winner == 1 else "White wins"
 
     if reason == 1:
         if point > 0:
-            return f"{winner_str} {point}子"
+            return f"{winner_str} by {point}"
         return winner_str
     elif reason == 2:
-        return f"{winner_str} (超时)"
+        return f"{winner_str} (timeout)"
     elif reason == 3:
-        return f"{winner_str} (中盘)"
+        return f"{winner_str} (middle game)"
     elif reason == 4:
-        return f"{winner_str} (认输)"
+        return f"{winner_str} (resignation)"
     else:
         return winner_str
 
 
-# 工具函数
+# Utility functions
 
 
 def main():
     parser = argparse.ArgumentParser(
         epilog=(
-            "示例:\n"
+            "Examples:\n"
             "  python3 download_by_name.py KataGo\n"
             "  python3 download_by_name.py KataGo --limit 5 --output-dir /tmp/qipu"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("nickname", help="用户昵称")
+    parser.add_argument("nickname", help="User nickname")
     parser.add_argument(
-        "-l", "--limit", type=int, default=1, help="下载数量限制（默认 1）"
+        "-l", "--limit", type=int, default=1, help="Download limit (default 1)"
     )
     parser.add_argument(
-        "-o", "--output-dir", default=".", help="输出目录（默认当前目录）"
+        "-o", "--output-dir", default=".", help="Output directory (default current directory)"
     )
     args = parser.parse_args()
 
@@ -180,49 +183,49 @@ def main():
     output_dir = args.output_dir
 
     print("=" * 60)
-    print("🎯 野狐围棋 - 通过昵称下载棋谱")
+    print("🎯 Fox Weiqi - Download game records by nickname")
     print("=" * 60)
     print()
 
     start_time = time.time()
 
-    # 1. 查询用户信息
-    print(f"🔍 正在查询昵称: {nickname} ...")
+    # 1. Query user information
+    print(f"🔍 Looking up nickname: {nickname} ...")
     try:
         user_info = query_user_by_name(nickname)
     except Exception as e:
-        print(f"❌ 查询失败: {e}")
+        print(f"❌ Lookup failed: {e}")
         sys.exit(1)
 
     uid = user_info["uid"]
-    print(f"✅ 找到用户{nickname}!")
+    print(f"✅ Found user {nickname}!")
     print(f"   UID: {uid}")
-    print(f"   昵称: {user_info['nickname']}")
-    print(f"   段位: {format_dan(user_info['dan'])}")
+    print(f"   Nickname: {user_info['nickname']}")
+    print(f"   Rank: {format_dan(user_info['dan'])}")
     print(
-        f"   战绩: {user_info['total_win']}胜 {user_info['total_lost']}负 {user_info['total_equal']}和"
+        f"   Record: {user_info['total_win']}W {user_info['total_lost']}L {user_info['total_equal']}D"
     )
     print()
 
-    # 2. 获取棋谱列表
-    print("📋 正在获取棋谱列表...")
+    # 2. Fetch the game list
+    print("📋 Fetching game list...")
     try:
         chess_list = fetch_chess_list(uid)
     except Exception as e:
-        print(f"❌ 获取棋谱列表失败: {e}")
+        print(f"❌ Failed to fetch game list: {e}")
         sys.exit(1)
 
     if not chess_list:
-        print("⚠️ 该用户没有公开的棋谱")
+        print("⚠️ This user has no public game records")
         sys.exit(0)
 
     total_games = len(chess_list)
-    print(f"✅ 找到 {total_games} 盘棋谱")
+    print(f"✅ Found {total_games} game records")
     print()
 
-    # 3. 显示棋谱列表
+    # 3. Show the game list
     print("=" * 60)
-    print("📊 棋谱列表 (最近{}盘)".format(limit if limit else total_games))
+    print("📊 Game list (most recent {})".format(limit if limit else total_games))
     print("=" * 60)
     print()
 
@@ -230,11 +233,11 @@ def main():
 
     for idx, game in enumerate(games_to_show, 1):
         chessid = game.get("chessid", "")
-        black_nick = game.get("blacknick", "黑棋")
-        white_nick = game.get("whitenick", "白棋")
+        black_nick = game.get("blacknick", "Black")
+        white_nick = game.get("whitenick", "White")
         black_dan = format_dan(game.get("blackdan", 0))
         white_dan = format_dan(game.get("whitedan", 0))
-        start_time_str = game.get("starttime", "未知")
+        start_time_str = game.get("starttime", "unknown")
         movenum = game.get("movenum", 0)
         winner = game.get("winner", 0)
         point = game.get("point", 0)
@@ -244,13 +247,13 @@ def main():
         print(
             f"{idx}. [{start_time_str}] {black_nick}({black_dan}) vs {white_nick}({white_dan})"
         )
-        print(f"   结果: {result} | 手数: {movenum} | ID: {chessid}")
+        print(f"   Result: {result} | Moves: {movenum} | ID: {chessid}")
         print()
 
-    # 4. 下载棋谱
+    # 4. Download game records
     print()
     print("=" * 60)
-    print("⬇️  开始下载棋谱...")
+    print("⬇️  Starting download...")
     print("=" * 60)
     print()
 
@@ -264,43 +267,43 @@ def main():
             game.get("starttime", "unknown").replace(" ", "_").replace(":", "-")
         )
 
-        # 生成文件名
+        # Generate the file name
         safe_nickname = re.sub(r"[^\w\u4e00-\u9fff]", "_", nickname)
         filename = f"{idx:03d}_{safe_nickname}_{start_time_str}_{chessid}.sgf"
         filepath = os.path.join(output_dir, filename)
 
-        print(f"[{idx}/{len(games_to_show)}] 下载 {chessid} ...", end=" ")
+        print(f"[{idx}/{len(games_to_show)}] Downloading {chessid} ...", end=" ")
 
         try:
             sgf_content = fetch_sgf(chessid)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(sgf_content)
-            print(f"✅ 已保存: {filename}")
+            print(f"✅ Saved: {filename}")
             success_count += 1
-            time.sleep(0.2)  # 避免请求过快
+            time.sleep(0.2)  # Avoid making requests too quickly
         except Exception as e:
-            print(f"❌ 失败: {e}")
+            print(f"❌ Failed: {e}")
             failed_list.append((chessid, str(e)))
 
-    # 5. 报告
+    # 5. Report
     elapsed = time.time() - start_time
     print()
     print("=" * 60)
-    print("📈 下载报告")
+    print("📈 Download Report")
     print("=" * 60)
-    print(f"   用户: {nickname} (UID: {uid})")
-    print(f"   保存目录: {output_dir}")
-    print(f"   成功: {success_count}/{len(games_to_show)}")
-    print(f"   耗时: {elapsed:.2f}秒")
+    print(f"   User: {nickname} (UID: {uid})")
+    print(f"   Save directory: {output_dir}")
+    print(f"   Success: {success_count}/{len(games_to_show)}")
+    print(f"   Elapsed: {elapsed:.2f}s")
 
     if failed_list:
         print()
-        print("❌ 下载失败列表:")
+        print("❌ Failed downloads:")
         for chessid, error in failed_list:
             print(f"   - {chessid}: {error}")
 
     print()
-    print("✅ 完成!")
+    print("✅ Done!")
 
 
 if __name__ == "__main__":

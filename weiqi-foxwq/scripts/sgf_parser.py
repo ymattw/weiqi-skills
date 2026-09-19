@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SGF 树状解析模块 - 完整支持嵌套变化分支
+SGF tree parsing module - full support for nested variation branches
 
-对外接口仅2个:
+Only two public interfaces:
 - parse_sgf(sgf_content: str) -> dict
 - parse_sgf_file(filepath: str) -> dict
 
-树节点固定结构:
+Fixed tree node structure:
 {
     "properties": dict,
     "is_root": bool,
@@ -23,7 +23,7 @@ from typing import Optional, List, Dict, Any, Tuple
 
 
 def coord_to_pos(coord: str) -> Optional[Tuple[int, int]]:
-    """将 SGF 坐标 (如 'pd') 转换为数字坐标 (x, y)"""
+    """Convert an SGF coordinate (such as 'pd') to numeric coordinates (x, y)"""
     if not coord or len(coord) < 2:
         return None
     x = ord(coord[0]) - 97
@@ -32,23 +32,23 @@ def coord_to_pos(coord: str) -> Optional[Tuple[int, int]]:
 
 
 def pos_to_coord(x: int, y: int) -> str:
-    """将数字坐标转换为 SGF 坐标"""
+    """Convert numeric coordinates to an SGF coordinate"""
     return chr(97 + x) + chr(97 + y)
 
 
 def parse_sgf(sgf_content: str) -> dict:
     """
-    解析 SGF 内容
+    Parse SGF content
 
-    返回结构:
+    Return structure:
     {
         "game_info": {
             "board_size": 19,
-            "black": "黑棋",
-            "white": "白棋",
+            "black": "Black",
+            "white": "White",
             "black_rank": "9d",
             "white_rank": "9d",
-            "game_name": "围棋棋谱",
+            "game_name": "Go game record",
             "date": "2024-01-01",
             "result": "B+R",
             "komi": "375",
@@ -77,26 +77,26 @@ def parse_sgf(sgf_content: str) -> dict:
 
 
 def parse_sgf_file(filepath: str) -> dict:
-    """解析 SGF 文件"""
+    """Parse an SGF file"""
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
     return parse_sgf(content)
 
 
 class _SGFParser:
-    """内部解析器实现"""
+    """Internal parser implementation"""
 
     def __init__(self):
         self.errors: List[str] = []
-        self._pending_branch_props: Dict[str, Any] = {}  # 缓存分支起始处的属性
+        self._pending_branch_props: Dict[str, Any] = {}  # Cache properties at the start of a branch
 
     def parse(self, sgf_content: str) -> dict:
-        """解析 SGF 内容"""
+        """Parse SGF content"""
         self.errors = []
 
         content = sgf_content.strip()
         if not content:
-            self.errors.append("SGF内容为空")
+            self.errors.append("SGF content is empty")
             return self._create_empty_result()
 
         try:
@@ -105,10 +105,10 @@ class _SGFParser:
             stats = self._calc_stats(tree)
             game_info = self._extract_game_info(tree)
 
-            # 提取主分支着法
+            # Extract main-branch moves
             moves = self._extract_main_moves(tree)
 
-            # 提取变化图
+            # Extract variations
             variations = self._extract_variations(tree)
 
             return {
@@ -120,11 +120,11 @@ class _SGFParser:
                 "errors": self.errors,
             }
         except Exception as e:
-            self.errors.append(f"解析错误: {str(e)}")
+            self.errors.append(f"Parse error: {str(e)}")
             return self._create_empty_result()
 
     def _create_empty_result(self) -> dict:
-        """创建空结果"""
+        """Create an empty result"""
         empty_tree = {
             "properties": {},
             "is_root": True,
@@ -148,15 +148,16 @@ class _SGFParser:
         }
 
     def _parse_tree(self, content: str) -> "_SGFNode":
-        """解析树状结构
+        """Parse the tree structure
 
-        SGF格式: (;GM[1](;B[pd];W[pp])(;B[dd]))
-        - 序列本身不创建节点，序列内的第一个 ';' 决定父节点
-        - '(' 只标记进入新层级，')' 标记退出
+        SGF format: (;GM[1](;B[pd];W[pp])(;B[dd]))
+        - A sequence itself does not create a node; the first ';' inside a sequence
+          determines the parent node
+        - '(' only marks entering a new level, ')' marks leaving
         """
-        # 父节点栈，存储序列的父节点（即序列内第一个节点的父节点）
+        # Parent stack: stores the sequence's parent (the parent of the first node in the sequence)
         parent_stack: List["_SGFNode"] = []
-        # 序列内当前处理的节点
+        # The node currently processed within the sequence
         seq_current: Optional["_SGFNode"] = None
         root: Optional["_SGFNode"] = None
         i = 0
@@ -167,23 +168,23 @@ class _SGFParser:
             char = content[i]
 
             if char == "(":
-                # 开始新序列
+                # Start a new sequence
                 if seq_current is not None:
-                    # 有序列内当前节点，作为新序列的父节点
+                    # There is a current node in the sequence; use it as the new sequence's parent
                     parent_stack.append(seq_current)
                 elif parent_stack:
-                    # 没有序列内节点但有父栈，复制栈顶
+                    # No node in the sequence but a parent stack exists; duplicate the top
                     parent_stack.append(parent_stack[-1])
                 elif root is not None:
-                    # 没有父栈但有根，根是新序列的父
+                    # No parent stack but a root exists; the root is the new sequence's parent
                     parent_stack.append(root)
-                # else: 第一个序列，parent_stack保持为空
+                # else: first sequence, parent_stack stays empty
 
                 paren_count += 1
                 seq_current = None
                 i += 1
 
-                # 预读并缓存 '(' 后的属性（如 C[...]），直到遇到 ';' 或 ')'
+                # Look ahead and cache properties after '(' (e.g. C[...]) until ';' or ')'
                 self._pending_branch_props = {}
                 while i < n:
                     c = content[i]
@@ -203,49 +204,49 @@ class _SGFParser:
                                 content, i + 1
                             )
                             if not closed:
-                                self.errors.append(f"属性 {prop_name} 的值未闭合")
+                                self.errors.append(f"Property {prop_name} value not closed")
                             values.append(value)
                         if values:
                             self._pending_branch_props[prop_name] = (
                                 values if len(values) > 1 else values[0]
                             )
                     else:
-                        self.errors.append(f"位置 {i}: 分支注释中意外字符 '{c}'，跳过")
+                        self.errors.append(f"Position {i}: unexpected character '{c}' in branch comment, skipping")
                         i += 1
 
             elif char == ")":
-                # 结束当前序列
+                # End the current sequence
                 if paren_count > 0:
                     if parent_stack:
                         parent = parent_stack.pop()
-                        # 序列结束后，seq_current 应该是序列的父节点
-                        # 以便下一个序列能正确地挂在同一父节点下
+                        # After the sequence ends, seq_current should be the sequence's parent
+                        # so the next sequence attaches to the same parent correctly
                         seq_current = parent
                     else:
                         seq_current = None
                     paren_count -= 1
                 else:
-                    self.errors.append(f"位置 {i}: 多余的右括号")
+                    self.errors.append(f"Position {i}: extra closing parenthesis")
                 i += 1
 
             elif char == ";":
-                # 创建新节点
+                # Create a new node
                 new_node = _SGFNode()
 
-                # 确定父节点
+                # Determine the parent node
                 if seq_current is not None and not seq_current.properties:
-                    # seq_current 是刚由'('创建的空白节点，给它属性
-                    # 这不应该发生，因为我们不再在'('时创建节点
+                    # seq_current is the empty node just created by '('; give it properties
+                    # This should not happen since we no longer create nodes on '('
                     parent = seq_current
                 elif seq_current is not None:
-                    # 序列内已有节点，新节点作为 seq_current 的子（主分支延续）
+                    # A node already exists in the sequence; the new node becomes its child (main-branch continuation)
                     seq_current.children.append(new_node)
                     new_node.parent = seq_current
                     new_node.move_number = (
                         seq_current.move_number + 1 if not seq_current.is_root else 1
                     )
                 elif parent_stack:
-                    # 序列的第一个节点，父节点是 parent_stack 栈顶
+                    # First node of the sequence; parent is the top of parent_stack
                     parent = parent_stack[-1]
                     parent.children.append(new_node)
                     new_node.parent = parent
@@ -253,29 +254,29 @@ class _SGFParser:
                         parent.move_number + 1 if not parent.is_root else 1
                     )
                 elif root is None:
-                    # 第一个节点，作为根
+                    # First node, treated as the root
                     root = new_node
                     new_node.is_root = True
                     new_node.move_number = 0
                 else:
-                    # 另一个顶级节点（无括号包裹的情况）
+                    # Another top-level node (case without parentheses)
                     if root.is_root and len(root.children) == 0 and not root.properties:
-                        # 根是空的，直接使用
+                        # The root is empty; use it directly
                         root.properties = {}
                         new_node.parent = root
                         new_node.move_number = 1
                         root.children.append(new_node)
                     elif root.is_root:
-                        # 创建包裹节点
+                        # Create a wrapper node
                         wrapper = _SGFNode()
                         wrapper.is_root = True
                         wrapper.move_number = 0
 
                         if not root.properties and len(root.children) == 0:
-                            # root 是空的，替换
+                            # root is empty; replace it
                             root = wrapper
                         else:
-                            # 移动原root
+                            # Move the original root
                             root.parent = wrapper
                             root.move_number = 1
                             wrapper.children.append(root)
@@ -289,16 +290,16 @@ class _SGFParser:
                         new_node.move_number = 1
                         root.children.append(new_node)
 
-                # 解析属性
+                # Parse properties
                 props, i = self._parse_properties(content, i + 1)
 
-                # 合并缓存的分支属性（如果有）
+                # Merge cached branch properties (if any)
                 if self._pending_branch_props:
-                    # 缓存的属性优先，但已被解析的属性不会被覆盖
+                    # Cached properties take priority, but already-parsed properties are not overwritten
                     merged_props = self._pending_branch_props.copy()
                     merged_props.update(props)
                     props = merged_props
-                    self._pending_branch_props = {}  # 清空缓存
+                    self._pending_branch_props = {}  # Clear the cache
 
                 new_node.properties = props
                 self._extract_move_info(new_node)
@@ -308,16 +309,16 @@ class _SGFParser:
             elif char in " \t\n\r":
                 i += 1
             else:
-                self.errors.append(f"位置 {i}: 意外字符 '{char}'，跳过")
+                self.errors.append(f"Position {i}: unexpected character '{char}', skipping")
                 i += 1
 
         if paren_count > 0:
-            self.errors.append("警告: 括号未完全闭合")
+            self.errors.append("Warning: parentheses not fully closed")
 
         return root or _SGFNode()
 
     def _parse_properties(self, content: str, start: int) -> tuple:
-        """解析属性列表，返回 (属性字典, 新位置)"""
+        """Parse a property list; returns (property dict, new position)"""
         props: Dict[str, Any] = {}
         i = start
         n = len(content)
@@ -342,7 +343,7 @@ class _SGFParser:
                 while i < n and content[i] == "[":
                     value, i, closed = self._parse_property_value(content, i + 1)
                     if not closed:
-                        self.errors.append(f"属性 {prop_name} 的值未闭合")
+                        self.errors.append(f"Property {prop_name} value not closed")
                     values.append(value)
 
                 if values:
@@ -350,14 +351,14 @@ class _SGFParser:
                 else:
                     props[prop_name] = ""
             else:
-                self.errors.append(f"位置 {i}: 属性名应为大写字母，跳过 '{char}'")
+                self.errors.append(f"Position {i}: property name must be uppercase, skipping '{char}'")
                 i += 1
 
         return props, i
 
     def _parse_property_value(self, content: str, start: int) -> tuple:
-        """解析属性值，正确处理转义
-        返回: (值, 新位置, 是否正常闭合)
+        """Parse a property value, handling escapes correctly
+        Returns: (value, new position, whether properly closed)
         """
         value = []
         i = start
@@ -368,7 +369,7 @@ class _SGFParser:
 
             if char == "\\" and i + 1 < n:
                 next_char = content[i + 1]
-                # SGF 转义规则：\] -> ], \\ -> \, \n -> 换行等
+                # SGF escape rules: \] -> ], \\ -> \, \n -> newline, etc.
                 if next_char == "]":
                     value.append("]")
                     i += 2
@@ -385,22 +386,22 @@ class _SGFParser:
                     value.append("\t")
                     i += 2
                 else:
-                    # 其他字符直接保留
+                    # Keep other characters as-is
                     value.append(next_char)
                     i += 2
             elif char == "]":
-                # 找到闭合括号
+                # Found the closing bracket
                 i += 1
                 return "".join(value), i, True
             else:
                 value.append(char)
                 i += 1
 
-        # 未正常闭合
+        # Not properly closed
         return "".join(value), i, False
 
     def _extract_move_info(self, node: "_SGFNode"):
-        """从属性中提取 color 和 coord"""
+        """Extract color and coord from the properties"""
         if "B" in node.properties:
             node.color = "B"
             node.coord = self._normalize_coord(node.properties["B"])
@@ -409,13 +410,13 @@ class _SGFParser:
             node.coord = self._normalize_coord(node.properties["W"])
 
     def _normalize_coord(self, val: Any) -> Optional[str]:
-        """统一坐标格式"""
+        """Normalize the coordinate format"""
         if isinstance(val, list) and val:
             return val[0] if val[0] else None
         return val if val else None
 
     def _node_to_dict(self, node: "_SGFNode") -> dict:
-        """将节点转换为字典"""
+        """Convert a node to a dictionary"""
         return {
             "properties": node.properties,
             "is_root": node.is_root,
@@ -426,7 +427,7 @@ class _SGFParser:
         }
 
     def _calc_stats(self, tree: dict) -> dict:
-        """计算统计信息"""
+        """Compute statistics"""
         total_nodes = 0
         move_nodes = 0
         max_depth = 0
@@ -439,7 +440,7 @@ class _SGFParser:
                 move_nodes += 1
             max_depth = max(max_depth, node.get("move_number", 0))
             children = node.get("children", [])
-            # 子节点数 > 1 表示有分支（除第一个主分支外的都是变化）
+            # More than 1 child means a branch (all but the first main branch are variations)
             if len(children) > 1:
                 branch_count += len(children) - 1
             for child in children:
@@ -455,10 +456,10 @@ class _SGFParser:
         }
 
     def _extract_game_info(self, tree: dict) -> dict:
-        """从根节点提取棋局信息"""
+        """Extract game information from the root node"""
         props = tree.get("properties", {})
 
-        # 获取第一个子节点的属性（预置子可能在这里）
+        # Get the first child's properties (preset stones may be here)
         children = tree.get("children", [])
         child_props = children[0].get("properties", {}) if children else {}
 
@@ -468,22 +469,22 @@ class _SGFParser:
                 return str(val[0])
             return str(val) if val else default
 
-        # 棋盘大小
+        # Board size
         try:
             board_size = int(get_prop("SZ", "19"))
         except ValueError:
             board_size = 19
 
-        # 让子数
+        # Handicap count
         try:
             handicap = int(get_prop("HA", "0"))
         except ValueError:
             handicap = 0
 
-        # 让子位置
+        # Handicap stone positions
         handicap_stones = []
 
-        # 解析 AB[] (添加黑子) - 先检查根节点，再检查第一个子节点
+        # Parse AB[] (added black stones) - check the root, then the first child
         ab_prop = props.get("AB", child_props.get("AB", []))
         if isinstance(ab_prop, str):
             ab_prop = [ab_prop]
@@ -496,7 +497,7 @@ class _SGFParser:
                     if 0 <= x < board_size and 0 <= y < board_size:
                         handicap_stones.append({"x": x, "y": y, "color": "B"})
 
-        # 解析 AW[] (添加白子) - 先检查根节点，再检查第一个子节点
+        # Parse AW[] (added white stones) - check the root, then the first child
         aw_prop = props.get("AW", child_props.get("AW", []))
         if isinstance(aw_prop, str):
             aw_prop = [aw_prop]
@@ -511,12 +512,12 @@ class _SGFParser:
 
         return {
             "board_size": board_size,
-            "black": get_prop("PB", "黑棋"),
-            "white": get_prop("PW", "白棋"),
+            "black": get_prop("PB", "Black"),
+            "white": get_prop("PW", "White"),
             "black_rank": get_prop("BR"),
             "white_rank": get_prop("WR"),
             "event": get_prop("EV"),
-            "game_name": get_prop("GN", "围棋棋谱"),
+            "game_name": get_prop("GN", "Go game record"),
             "date": get_prop("DT"),
             "result": get_prop("RE"),
             "komi": get_prop("KM", "375"),
@@ -525,7 +526,7 @@ class _SGFParser:
         }
 
     def _extract_main_moves(self, tree: dict) -> List[Dict[str, str]]:
-        """从树中提取主分支着法"""
+        """Extract the main-branch moves from the tree"""
         moves = []
         node = tree
         while node.get("children"):
@@ -537,7 +538,7 @@ class _SGFParser:
         return moves
 
     def _extract_variations(self, tree: dict) -> Dict[int, List[dict]]:
-        """从树中提取变化图"""
+        """Extract variations from the tree"""
         variations = {}
 
         def traverse(node, move_num):
@@ -545,7 +546,7 @@ class _SGFParser:
                 return
 
             for i, child in enumerate(node["children"]):
-                # 收集这个分支的着法
+                # Collect this branch's moves
                 child_moves = []
                 current = child
                 while current:
@@ -559,12 +560,12 @@ class _SGFParser:
                     else:
                         break
 
-                # i > 0 表示这是变化分支
+                # i > 0 means this is a variation branch
                 if i > 0 and child_moves:
                     if move_num not in variations:
                         variations[move_num] = []
 
-                    # 提取注释
+                    # Extract the comment
                     comment = ""
                     props = child.get("properties", {})
                     if "C" in props:
@@ -574,7 +575,7 @@ class _SGFParser:
                         else:
                             comment = str(c) if c else ""
 
-                    name = f"变化{len(variations[move_num]) + 1}"
+                    name = f"Variation {len(variations[move_num]) + 1}"
 
                     variations[move_num].append(
                         {"name": name, "moves": child_moves, "comment": comment}
@@ -591,7 +592,7 @@ class _SGFParser:
 
 
 class _SGFNode:
-    """内部节点类"""
+    """Internal node class"""
 
     def __init__(self):
         self.properties: Dict[str, Any] = {}
@@ -603,26 +604,26 @@ class _SGFNode:
         self.children: List["_SGFNode"] = []
 
 
-# ============ 单元测试 ============
+# ============ Unit tests ============
 
 
 class TestSGFParser(unittest.TestCase):
-    """SGF 解析器单元测试"""
+    """SGF parser unit tests"""
 
     def test_empty_sgf(self):
-        """测试空 SGF"""
+        """Test an empty SGF"""
         result = parse_sgf("")
-        self.assertIn("SGF内容为空", result["errors"])
+        self.assertIn("SGF content is empty", result["errors"])
         self.assertEqual(result["stats"]["total_nodes"], 1)
         self.assertEqual(result["stats"]["move_nodes"], 0)
 
     def test_root_only(self):
-        """测试只有根节点"""
-        sgf = "(;GM[1]FF[4]PB[黑棋]PW[白棋])"
+        """Test a root-only document"""
+        sgf = "(;GM[1]FF[4]PB[Black]PW[White])"
         result = parse_sgf(sgf)
 
-        self.assertEqual(result["game_info"]["black"], "黑棋")
-        self.assertEqual(result["game_info"]["white"], "白棋")
+        self.assertEqual(result["game_info"]["black"], "Black")
+        self.assertEqual(result["game_info"]["white"], "White")
         self.assertEqual(result["tree"]["is_root"], True)
         self.assertEqual(result["tree"]["move_number"], 0)
         self.assertEqual(result["tree"]["color"], None)
@@ -633,7 +634,7 @@ class TestSGFParser(unittest.TestCase):
         self.assertEqual(len(result["errors"]), 0)
 
     def test_single_branch(self):
-        """测试单分支（标准棋谱）"""
+        """Test a single branch (standard game record)"""
         sgf = "(;GM[1];B[pd];W[pp];B[dd])"
         result = parse_sgf(sgf)
 
@@ -658,7 +659,7 @@ class TestSGFParser(unittest.TestCase):
         self.assertEqual(second_move["coord"], "pp")
 
     def test_root_variations(self):
-        """测试根节点多分支（无主分支）"""
+        """Test multiple branches at the root (no main branch)"""
         sgf = "(;GM[1](;B[pd])(;B[dd]))"
         result = parse_sgf(sgf)
 
@@ -669,45 +670,45 @@ class TestSGFParser(unittest.TestCase):
         tree = result["tree"]
         self.assertEqual(len(tree["children"]), 2)
 
-        # 第一个分支
+        # First branch
         self.assertEqual(tree["children"][0]["color"], "B")
         self.assertEqual(tree["children"][0]["coord"], "pd")
 
-        # 第二个分支（变化）
+        # Second branch (variation)
         self.assertEqual(tree["children"][1]["color"], "B")
         self.assertEqual(tree["children"][1]["coord"], "dd")
 
     def test_nested_variations(self):
-        """测试嵌套变化分支"""
+        """Test nested variation branches"""
         sgf = "(;GM[1];B[pd](;W[pp])(;W[dp](;B[dd])(;B[qd])))"
         result = parse_sgf(sgf)
 
-        # 树结构: Root -> B[pd] -> (W[pp], W[dp] -> (B[dd], B[qd]))
-        # B[pd] 有 2 个子，贡献 1 个 branch
-        # W[dp] 有 2 个子，贡献 1 个 branch
-        # 总计 2 个 branch
+        # Tree structure: Root -> B[pd] -> (W[pp], W[dp] -> (B[dd], B[qd]))
+        # B[pd] has 2 children, contributing 1 branch
+        # W[dp] has 2 children, contributing 1 branch
+        # 2 branches total
         self.assertEqual(result["stats"]["total_nodes"], 6)
         self.assertEqual(result["stats"]["move_nodes"], 5)
         self.assertEqual(result["stats"]["branch_count"], 2)
 
         tree = result["tree"]
-        # 根 -> B[pd]
+        # Root -> B[pd]
         b_node = tree["children"][0]
         self.assertEqual(b_node["color"], "B")
 
-        # B[pd] 有两个子: W[pp] 和 W[dp]
+        # B[pd] has two children: W[pp] and W[dp]
         self.assertEqual(len(b_node["children"]), 2)
         self.assertEqual(b_node["children"][0]["coord"], "pp")
         self.assertEqual(b_node["children"][1]["coord"], "dp")
 
-        # W[dp] 有两个子: B[dd] 和 B[qd]
+        # W[dp] has two children: B[dd] and B[qd]
         w_dp_node = b_node["children"][1]
         self.assertEqual(len(w_dp_node["children"]), 2)
         self.assertEqual(w_dp_node["children"][0]["coord"], "dd")
         self.assertEqual(w_dp_node["children"][1]["coord"], "qd")
 
     def test_escape_chars(self):
-        """测试转义字符"""
+        """Test escape characters"""
         sgf = r"(;GM[1]C[Comment \] test])"
         result = parse_sgf(sgf)
 
@@ -715,7 +716,7 @@ class TestSGFParser(unittest.TestCase):
         self.assertEqual(len(result["errors"]), 0)
 
     def test_handicap(self):
-        """测试让子棋"""
+        """Test a handicap game"""
         sgf = "(;GM[1]SZ[19]HA[2]AB[pd][dp];W[pp])"
         result = parse_sgf(sgf)
 
@@ -728,13 +729,13 @@ class TestSGFParser(unittest.TestCase):
             result["game_info"]["handicap_stones"][1], {"x": 3, "y": 15, "color": "B"}
         )
 
-        # 让子位置应在根节点
+        # Handicap positions should be at the root node
         ab = result["tree"]["properties"]["AB"]
         self.assertIsInstance(ab, list)
         self.assertEqual(len(ab), 2)
 
     def test_multi_value_property(self):
-        """测试多值属性"""
+        """Test multi-value properties"""
         sgf = "(;GM[1]AB[aa][bb][cc])"
         result = parse_sgf(sgf)
 
@@ -746,25 +747,25 @@ class TestSGFParser(unittest.TestCase):
         self.assertEqual(ab[2], "cc")
 
     def test_invalid_sgf(self):
-        """测试无效 SGF（未闭合属性值）"""
-        sgf = "(;GM[1];B[pd;W[pp)"  # B的属性值未闭合
+        """Test an invalid SGF (unclosed property value)"""
+        sgf = "(;GM[1];B[pd;W[pp)"  # B's property value is unclosed
         result = parse_sgf(sgf)
 
-        # 应该有错误（属性值未闭合）
-        has_error = any("未闭合" in err or "属性" in err for err in result["errors"])
+        # There should be an error (unclosed property value)
+        has_error = any("not closed" in err or "Property" in err for err in result["errors"])
         self.assertTrue(has_error or len(result["errors"]) > 0)
 
     def test_extra_close_paren(self):
-        """测试多余右括号"""
+        """Test an extra closing parenthesis"""
         sgf = "(;GM[1];B[pd]))"
         result = parse_sgf(sgf)
 
-        # 应该有多余的右括号错误或解析错误
-        has_paren_error = any("括号" in err for err in result["errors"])
+        # There should be an extra-closing-parenthesis error or a parse error
+        has_paren_error = any("parenthesis" in err for err in result["errors"])
         self.assertTrue(has_paren_error or len(result["errors"]) > 0)
 
     def test_pass_move(self):
-        """测试虚手（停着）"""
+        """Test a pass move"""
         sgf = "(;GM[1];B[pd];W[];B[dd])"
         result = parse_sgf(sgf)
 
@@ -774,8 +775,8 @@ class TestSGFParser(unittest.TestCase):
         self.assertIsNone(w_node["coord"])
 
     def test_complex_tree(self):
-        """测试复杂树结构"""
-        sgf = """(;GM[1]FF[4]PB[黑棋]PW[白棋]
+        """Test a complex tree structure"""
+        sgf = """(;GM[1]FF[4]PB[Black]PW[White]
             (;B[pd];W[pp])
             (;B[dd];W[dp]
                 (;B[pd])
@@ -785,17 +786,17 @@ class TestSGFParser(unittest.TestCase):
         )"""
         result = parse_sgf(sgf)
 
-        # 根有 3 个子，贡献 2 个 branch
-        # 第二个分支下又有分支，总共应有 4 个 branch
+        # The root has 3 children, contributing 2 branches
+        # The second branch has sub-branches, so there should be 4 branches total
         self.assertEqual(result["stats"]["branch_count"], 4)
 
-        # 验证 game_info
-        self.assertEqual(result["game_info"]["black"], "黑棋")
-        self.assertEqual(result["game_info"]["white"], "白棋")
+        # Verify game_info
+        self.assertEqual(result["game_info"]["black"], "Black")
+        self.assertEqual(result["game_info"]["white"], "White")
         self.assertEqual(result["game_info"]["board_size"], 19)
 
     def test_multigo_format(self):
-        """测试 MultiGo 格式的复杂棋谱（用户提供的棋谱）"""
+        """Test a complex game record in MultiGo format (user-provided game)"""
         sgf = """(;CA[gb2312]AP[MultiGo:4.4.4]MULTIGOGM[0]
 
 (;B[pd]N[b1];W[qc];B[qd];W[pc];B[oc];W[ob];B[nb];W[nc];B[od];W[mb];B[pb];W[na];B[qb])
@@ -806,34 +807,34 @@ class TestSGFParser(unittest.TestCase):
 
         result = parse_sgf(sgf)
 
-        # 验证基本结构
+        # Verify the basic structure
         self.assertEqual(result["stats"]["total_nodes"], 30)
         self.assertEqual(result["stats"]["move_nodes"], 29)
         self.assertEqual(result["stats"]["max_depth"], 13)
         self.assertEqual(result["stats"]["branch_count"], 3)
 
-        # 验证根节点属性
+        # Verify root node properties
         self.assertEqual(result["tree"]["properties"]["CA"], "gb2312")
         self.assertEqual(result["tree"]["properties"]["AP"], "MultiGo:4.4.4")
 
-        # 验证根有 3 个直接子节点（三个分支）
+        # Verify the root has 3 direct children (three branches)
         self.assertEqual(len(result["tree"]["children"]), 3)
 
-        # 验证 b1 分支
+        # Verify the b1 branch
         b1 = result["tree"]["children"][0]
         self.assertEqual(b1["properties"]["N"], "b1")
         self.assertEqual(b1["coord"], "pd")
         self.assertEqual(b1["move_number"], 1)
 
-        # 验证 b2 分支及其子分支
+        # Verify the b2 branch and its sub-branches
         b2 = result["tree"]["children"][1]
         self.assertEqual(b2["properties"]["N"], "b2")
         # B[pd] N=b2 -> W[qf] -> (B[qe] N=b21, B[nc] N=b22)
         self.assertEqual(len(b2["children"]), 1)  # W[qf]
         w_qf = b2["children"][0]
-        self.assertEqual(len(w_qf["children"]), 2)  # b21, b22 子分支
+        self.assertEqual(len(w_qf["children"]), 2)  # b21, b22 sub-branches
 
-        # 验证 b3 分支
+        # Verify the b3 branch
         b3 = result["tree"]["children"][2]
         self.assertEqual(b3["properties"]["N"], "b3")
         self.assertEqual(b3["coord"], "qd")
@@ -841,24 +842,24 @@ class TestSGFParser(unittest.TestCase):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("SGF Parser 单元测试")
+    print("SGF Parser Unit Tests")
     print("=" * 60)
 
-    # 创建测试套件
+    # Create the test suite
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(TestSGFParser)
 
-    # 运行测试
+    # Run the tests
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
     print("=" * 60)
     if result.wasSuccessful():
-        print("✓ 所有测试通过")
+        print("✓ All tests passed")
     else:
-        print("✗ 测试失败")
-        # 输出失败详情
+        print("✗ Tests failed")
+        # Output failure details
         for failure in result.failures + result.errors:
-            print(f"\n失败: {failure[0]}")
+            print(f"\nFailed: {failure[0]}")
             print(failure[1])
     print("=" * 60)
